@@ -1,5 +1,6 @@
 package com.lhu.samplethread;
 
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -14,10 +15,11 @@ import android.view.MenuItem;
 import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 
 public class MainActivity extends AppCompatActivity {
-    TextView messageView;
+    TextView messageView,counterView;
     ProgressBar progressDownload;
 
     @Override
@@ -56,10 +58,91 @@ public class MainActivity extends AppCompatActivity {
                 startRunnable();
             }
         });
+
+        btn = (Button)findViewById(R.id.btn_async);
+        btn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+//              new MyTask().execute();
+
+                MyAsyncTask task = new MyAsyncTask();
+                task.setOnDownloadListener(new MyAsyncTask.OnDownloadListener() {
+                    @Override
+                    public void onProgressUpdate(int progress) {
+                        messageView.setText("progress : " + progress);
+                        progressDownload.setProgress(progress);
+                    }
+
+                    @Override
+                    public void onProgessDone(boolean success) {
+                        messageView.setText("progress done");
+                    }
+                });
+
+                task.execute();
+
+            }
+        });
+
+        counterView = (TextView)findViewById(R.id.text_counter);
+        btn = (Button)findViewById(R.id.btn_counter);
+        btn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startTime = NOT_START;
+                mHandler.post(downRunnable);
+            }
+        });
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        mHandler.removeCallbacks(downRunnable);
+    }
+
+    class MyTask extends AsyncTask<String, Integer, Boolean> {
+
+        @Override
+        protected Boolean doInBackground(String... params) {
+            int count = 0;
+            while (count <= 100) {
+                publishProgress(count);
+                count += 5;
+
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            return true;
+        }
+
+        @Override
+        protected void onPostExecute(Boolean aBoolean) {
+            super.onPostExecute(aBoolean);
+            messageView.setText("progress done");
+
+        }
+
+        @Override
+        protected void onProgressUpdate(Integer... values) {
+            super.onProgressUpdate(values);
+            int progress = values[0];
+            messageView.setText("progress : " + progress);
+            progressDownload.setProgress(progress);
+        }
+
+
+    }
     public static final int MESSAGE_PROGRESS = 1;
     public static final int MESSAGE_DONE = 2;
+
+    public static final int MESSAGE_BACK_TIMEOUT = 3;
+    public static final int TIME_BACK_TIMEOUT = 2000;
+
+    private boolean isBackPressed = false;
 
     Handler mHandler = new android.os.Handler(Looper.getMainLooper()) {
         @Override
@@ -74,9 +157,25 @@ public class MainActivity extends AppCompatActivity {
                 case MESSAGE_DONE :
                     messageView.setText("progress done");
                     break;
+                case MESSAGE_BACK_TIMEOUT :
+                    isBackPressed = false;
+                    break;
             }
         }
     };
+
+    @Override
+    public void onBackPressed() {
+        if (isBackPressed) {
+            mHandler.removeMessages(MESSAGE_BACK_TIMEOUT);
+            super.onBackPressed();
+        } else {
+            isBackPressed = true;
+            Toast.makeText(this, "back key press", Toast.LENGTH_SHORT).show();
+            mHandler.sendEmptyMessageDelayed(MESSAGE_BACK_TIMEOUT, TIME_BACK_TIMEOUT);
+        }
+    }
+
 
     private void startDownload() {
         new Thread(new Runnable() {
@@ -119,6 +218,27 @@ public class MainActivity extends AppCompatActivity {
             }
         }).start();
     }
+
+    public static final long NOT_START = -1;
+    long startTime = NOT_START;
+
+    Runnable downRunnable = new Runnable() {
+        @Override
+        public void run() {
+            long currentTime = System.currentTimeMillis();
+            if (startTime == NOT_START) {
+                startTime = currentTime;
+            }
+
+            int interval = (int) (currentTime - startTime);
+            int count = interval / 1000;
+            int rest = interval % 1000;
+            int next = 1000 - rest;
+
+            counterView.setText("count : " + count);
+            mHandler.postDelayed(this, next);
+        }
+    };
 
     class ProgressRunnable implements Runnable {
         int progress;
